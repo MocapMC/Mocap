@@ -1,49 +1,55 @@
 {
-	"author": "MajestikButter",
-	"name": "Game Recorder",
-	"packs": {
-		"behaviorPack": "./packs/BP",
-		"resourcePack": "./packs/RP"
-	},
-	"regolith": {
-		"dataPath": "./packs/data",
-		"filterDefinitions": {
-			"gametests": {
-				"url": "github.com/MajestikButter/regolith-filters-1",
-				"version": "latest"
-			}
-		},
-		"profiles": {
-			"default": {
-				"export": {
-					"readOnly": false,
-					"target": "local"
-				},
-				"filters": [
-					{
-						"filter": "gametests",
-						"settings": {
-							"buildOptions": {
-								"bundle": true,
-								"entryPoints": [
-									"data/gametests/src/index.ts"
-								],
-								"format": "esm",
-								"minify": false,
-								"target": "es2020"
-							},
-							"manifest": "BP/manifest.json",
-							"moduleUUID": "549e4471-389b-4bf1-8ee9-a7eb8ec738cd",
-							"modules": [
-								"@minecraft/server@1.3.0-beta",
-								"@minecraft/server-ui@1.1.0-beta",
-								"@minecraft/server-gametest@1.0.0-beta"
-							],
-							"outfile": "BP/scripts/index.js"
-						}
-					}
-				]
-			}
-		}
-	}
+  "author": "MajestikButter",
+  "name": "Game Recorder",
+  "packs": {
+    "behaviorPack": "./packs/BP",
+    "resourcePack": "./packs/RP"
+  },
+  "regolith": {
+    "dataPath": "./packs/data",
+    "filterDefinitions": {
+      "gametests": {
+        "url": "github.com/MajestikButter/regolith-filters-1",
+        "version": "latest"
+      }
+    },
+    "profiles": {
+      "development": {
+        "export": { "target": "development" },
+        "filters": [{ "profile": "default" }]
+      },
+      "preview": {
+        "export": { "target": "preview" },
+        "filters": [{ "profile": "default" }]
+      },
+      "default": {
+        "export": {
+          "readOnly": false,
+          "target": "local"
+        },
+        "filters": [
+          {
+            "filter": "gametests",
+            "settings": {
+              "buildOptions": {
+                "bundle": true,
+                "entryPoints": ["data/gametests/src/index.ts"],
+                "format": "esm",
+                "minify": false,
+                "target": "es2020"
+              },
+              "manifest": "BP/manifest.json",
+              "moduleUUID": "549e4471-389b-4bf1-8ee9-a7eb8ec738cd",
+              "modules": [
+                "@minecraft/server@1.3.0-beta",
+                "@minecraft/server-ui@1.1.0-beta",
+                "@minecraft/server-gametest@1.0.0-beta"
+              ],
+              "outfile": "BP/scripts/index.js"
+            }
+          }
+        ]
+      }
+    }
+  }
 }
