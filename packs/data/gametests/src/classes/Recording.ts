@@ -7,6 +7,9 @@ import {
   Player,
   EquipmentSlot,
   EntityEquipmentInventoryComponent,
+  Vector3,
+  Vector,
+  Vector2,
 } from '@minecraft/server';
 import { EntityEvent, EntityState } from './Entity';
 import { PlaybackState } from '../enums/PlaybackState';
@@ -35,6 +38,7 @@ export class Recording {
 
   state = PlaybackState.none;
   tick = 0;
+  simTick = 0;
   length = 0;
 
   recordCount = 0;
@@ -134,6 +138,10 @@ export class Recording {
 
     this.tick = 0;
     this.state = PlaybackState.recording;
+
+    if (this.length) {
+      this.startSimulating(true);
+    }
     // this.entityStates.clear();
 
     const d = this.dimension;
@@ -174,7 +182,10 @@ export class Recording {
 
     const prevDatas: {
       [k: string]: {
-        prevEquipment: { -readonly [k in keyof typeof EquipmentSlot]?: string };
+        equipment: { -readonly [k in keyof typeof EquipmentSlot]?: string };
+        loc: Vector3;
+        rot: Vector2;
+        vel: Vector3;
       };
     } = {};
 
@@ -183,18 +194,39 @@ export class Recording {
         if (entry.recordCount !== this.recordCount) continue;
         if (entry.died < this.tick) continue;
 
-        if (!prevDatas[entry.id]) prevDatas[entry.id] = { prevEquipment: {} };
-        const prevData = prevDatas[entry.id];
-
         const entity = entry.entity;
         if (!entity) {
           console.warn('y no entity :sob:');
           continue;
         }
 
-        this.addEntityEvent(e, EntityEvent.position, entity.location);
-        this.addEntityEvent(e, EntityEvent.rotate, entity.getRotation());
-        this.addEntityEvent(e, EntityEvent.velocity, entity.getVelocity());
+        if (!prevDatas[entry.id])
+          prevDatas[entry.id] = {
+            equipment: {},
+            loc: entity.location,
+            rot: entity.getRotation(),
+            vel: entity.getVelocity(),
+          };
+        const prevData = prevDatas[entry.id];
+
+        const loc = entity.location;
+        const prevLoc = prevData.loc;
+        if (Vector.subtract(loc, prevLoc).length() > 0.1) {
+          this.addEntityEvent(e, EntityEvent.position, entity.location);
+        }
+
+        const rot = entity.getRotation();
+        const prevRot = prevData.rot;
+        const difRot = { x: prevRot.x - rot.x, y: prevRot.y - rot.y };
+        if (Math.sqrt(difRot.x * difRot.x + difRot.y * difRot.y) > 0.1) {
+          this.addEntityEvent(e, EntityEvent.rotate, rot);
+        }
+
+        const vel = entity.getVelocity();
+        const prevVel = prevData.vel;
+        if (Vector.subtract(vel, prevVel).length() > 0.1) {
+          this.addEntityEvent(e, EntityEvent.velocity, vel);
+        }
 
         if (entity instanceof Player) {
           const inv = <EntityEquipmentInventoryComponent>(
@@ -203,9 +235,9 @@ export class Recording {
           for (const slotKey in EquipmentSlot) {
             const slot = EquipmentSlot[<keyof typeof EquipmentSlot>slotKey];
             const item = inv.getEquipment(slot);
-            if (prevData.prevEquipment[slot] !== item?.typeId) {
+            if (prevData.equipment[slot] !== item?.typeId) {
               this.addEntityEvent(e, EntityEvent.changeEquipment, slot, item);
-              prevData.prevEquipment[slot] = item?.typeId;
+              prevData.equipment[slot] = item?.typeId;
             }
           }
         }
@@ -221,85 +253,76 @@ export class Recording {
     this.#recordIntervalId = undefined;
     this.state = PlaybackState.none;
 
-    // for (const [e, entry] of this.entityStates) {
-    //   if (entry.died <= this.tick) continue;
-    //   this.addEntityEvent(e, EntityEvent.despawn);
-    //   entry.died = this.tick;
-    // }
+    for (const [e, entry] of this.entityStates) {
+      if (entry.died <= this.tick) continue;
+      this.addEntityEvent(e, EntityEvent.despawn);
+      entry.died = this.tick;
+    }
+
+    if (this.#simulateIntervalId) {
+      try {
+        this.stopSimulating();
+      } catch (e) {
+        console.error(e);
+      }
+    }
 
     this.clearRecordEvents();
     this.length = Math.max(this.tick, this.length);
     this.recordCount++;
   }
 
-  startSimulating(reverse = false) {
-    if (this.state !== PlaybackState.none || this.#simulateIntervalId)
-      throw 'Unable to start simulating';
-    this.tick = reverse ? this.length : 0;
-    this.state = PlaybackState.simulating;
+  startSimulating(recording = false) {
+    if (this.#simulateIntervalId) throw 'Unable to start simulating';
+
+    this.simTick = 0;
+    if (!recording) this.state = PlaybackState.simulating;
 
     for (const [_, s] of this.entityStates) s.state.dereferenceEntity();
 
     this.#simulateIntervalId = system.runInterval(() => {
-      const t = this.tick;
-      if (reverse) {
-        if (t <= 0) {
-          this.stopSimulating();
-          return;
-        }
-      } else if (t > this.length) {
+      if (!this.#simulateIntervalId) return;
+
+      const t = this.simTick;
+      if (t > this.length) {
         this.stopSimulating();
         return;
       }
 
       for (const e of this.entityStates.values()) {
-        const { created, state, died } = e;
+        const { created, state, died, recordCount } = e;
 
-        if (reverse) {
-          if (t < created || t > died) continue;
+        if (recording && recordCount == this.recordCount) continue;
 
-          try {
-            if (t === died) {
-              state.simulate(t, true);
-              const id = state.entityId;
-              if (!id) {
-                console.warn('Failed to create entity');
-                continue;
-              }
-              e.id = id;
-            } else state.simulate(t, false);
-          } catch (e) {
-            console.warn(e);
-          }
-        } else {
-          if (t < created || t > died) continue;
-          try {
-            if (t === created) {
-              state.simulate(t, true);
-              const id = state.entityId;
-              if (!id) {
-                console.warn('Failed to create entity');
-                continue;
-              }
-              e.id = id;
-            } else state.simulate(t);
-          } catch (e) {
-            console.warn(e);
-          }
+        if (t < created || t > died) continue;
+        try {
+          if (t === created) {
+            state.simulate(t, true);
+            const id = state.entityId;
+            if (!id) {
+              console.warn('Failed to create entity');
+              continue;
+            }
+            e.id = id;
+          } else state.simulate(t);
+        } catch (e) {
+          console.warn(e);
         }
       }
-      if (reverse) {
-        this.tick--;
-      } else this.tick++;
+
+      this.simTick++;
     }, 1);
   }
 
   stopSimulating() {
-    if (this.state !== PlaybackState.simulating || !this.#simulateIntervalId)
+    if (!this.#simulateIntervalId) {
       throw 'No simulation in progress';
+    }
     system.clearRun(this.#simulateIntervalId);
     this.#simulateIntervalId = undefined;
-    this.state = PlaybackState.none;
+    if (this.state === PlaybackState.simulating) {
+      this.state = PlaybackState.none;
+    }
 
     for (const entry of this.entityStates.values()) {
       entry.state.kill();

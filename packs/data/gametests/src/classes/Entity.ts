@@ -86,6 +86,7 @@ const EventFunc: {
   },
 };
 
+let actId = 0;
 export class EntityState {
   #events = new Map<number, [EntityEvent, any[]][]>();
 
@@ -124,7 +125,9 @@ export class EntityState {
     let e: Entity;
     if (this.id == 'minecraft:player') {
       const rel = TEST.relativeBlockLocation(this.#init_pos);
-      e = TEST.spawnSimulatedPlayer(rel, 'Player');
+      const idStr = `${actId}`.replace(/./g, '§$&');
+      e = TEST.spawnSimulatedPlayer(rel, `Actor${idStr}§e`);
+      actId += 1;
     } else {
       e = d.spawnEntity(this.id, this.#init_pos);
     }
