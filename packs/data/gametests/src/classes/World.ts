@@ -1,14 +1,22 @@
-import { world, BoundingBox } from '@minecraft/server';
+import { world, BoundingBox, MinecraftBlockTypes } from '@minecraft/server';
 
 export enum WorldEvent {
   blockBreak = 'blockBreak',
+  blockPlace = 'blockPlace',
 }
 
 const EventFunc: {
   [k in WorldEvent]: (state: WorldState, args: any[]) => void;
 } = {
   blockBreak(state, args) {
-    state.dimension;
+    const block = state.dimension.getBlock(args[0]);
+    if (!block) throw 'failed to get block';
+    block.setType(MinecraftBlockTypes.air);
+  },
+  blockPlace(state, args) {
+    const block = state.dimension.getBlock(args[0]);
+    if (!block) throw 'failed to get block';
+    block.setPermutation(args[1]);
   },
 };
 
@@ -30,8 +38,6 @@ export class WorldState {
     if (!evs.length) this.#events.set(tick, evs);
     evs.push([event, args]);
   }
-
-  spawn() {}
 
   simulate(tick: number) {
     const evs = this.#events.get(tick);

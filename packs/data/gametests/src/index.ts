@@ -6,10 +6,7 @@ world.afterEvents.chatSend.subscribe((ev) => {
   world.sendMessage(`${ev.sender.name} said ${ev.message}`);
 });
 
-const record = new Recording('test', 'overworld', {
-  from: { x: 0, y: -64, z: 0 },
-  to: { x: 64, y: 320, z: 64 },
-});
+let record: Recording;
 
 world.beforeEvents.chatSend.subscribe((ev) => {
   const msg = ev.message;
@@ -21,6 +18,19 @@ world.beforeEvents.chatSend.subscribe((ev) => {
     try {
       const args = msg.split(' ');
       const cmd = args[0].slice(1);
+
+      if (cmd !== 'initialize' && !record) {
+        throw 'No recording has been initialized';
+      }
+      if (cmd === 'initialize') {
+        if (record) {
+          throw 'Recording already initialized';
+        }
+        record = new Recording('test', 'overworld', {
+          from: { x: 0, y: -64, z: 0 },
+          to: { x: 64, y: 320, z: 64 },
+        });
+      }
 
       switch (cmd) {
         case 'simulate': {

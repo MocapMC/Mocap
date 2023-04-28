@@ -13,7 +13,7 @@ import {
 } from '@minecraft/server';
 import { EntityEvent, EntityState } from './Entity';
 import { PlaybackState } from '../enums/PlaybackState';
-import { WorldState } from './World';
+import { WorldEvent, WorldState } from './World';
 
 interface EventSignal<c extends Function = Function> {
   subscribe(callback: c): c;
@@ -47,15 +47,36 @@ export class Recording {
   #simulateIntervalId?: number;
 
   constructor(id: string, dimension: string, area: BlockVolume) {
-    this.worldState = new WorldState(
-      id,
-      dimension,
-      BlockVolumeUtils.getBoundingBox(area)
-    );
+    const bbox = BlockVolumeUtils.getBoundingBox(area);
+    this.worldState = new WorldState(id, dimension, bbox);
+
+    this.saveStructure();
+  }
+
+  get id() {
+    return this.worldState.id;
+  }
+
+  get bbox() {
+    return this.worldState.bbox;
   }
 
   get dimension() {
     return this.worldState.dimension;
+  }
+
+  saveStructure() {
+    const { min, max } = this.bbox;
+    this.dimension.runCommand(
+      `structure save "mocap:recording/${this.id}" ${min.x} ${min.y} ${min.z} ${max.x} ${max.y} ${max.z}`
+    );
+  }
+
+  loadStructure() {
+    const { min } = this.bbox;
+    this.dimension.runCommand(
+      `structure load "mocap:recording/${this.id}" ${min.x} ${min.y} ${min.z}`
+    );
   }
 
   entityToStateId(e: Entity): EntityStateId {
@@ -102,6 +123,11 @@ export class Recording {
     if (!entry) throw 'Could not find entity state';
     entry.died = this.tick;
     entry.state.addEvent(this.tick, EntityEvent.death);
+  }
+
+  addWorldEvent(event: WorldEvent, ...args: any[]) {
+    const state = this.worldState;
+    state.addEvent(this.tick, event, args);
   }
 
   addEntityEvent(e: string, event: EntityEvent, ...args: any[]) {
@@ -177,7 +203,21 @@ export class Recording {
       this.addEntityEvent(id, EntityEvent.hurt);
     });
     this.handleRecordEvent(world.afterEvents.blockBreak, (ev) => {
+      this.addWorldEvent(WorldEvent.blockBreak, ev.block.location);
       this.addEntityEvent(this.entityToStateId(ev.player), EntityEvent.attack);
+    });
+    this.handleRecordEvent(world.afterEvents.blockPlace, (ev) => {
+      const { location, permutation } = ev.block;
+      this.addWorldEvent(WorldEvent.blockPlace, location, permutation);
+      // this.addEntityEvent(this.entityToStateId(ev.player), EntityEvent.attack);
+    });
+    this.handleRecordEvent(world.afterEvents.itemUse, (ev) => {
+      const e = ev.source;
+      this.addEntityEvent(
+        this.entityToStateId(e),
+        EntityEvent.use,
+        ev.itemStack
+      );
     });
 
     const prevDatas: {
@@ -278,6 +318,8 @@ export class Recording {
     this.simTick = 0;
     if (!recording) this.state = PlaybackState.simulating;
 
+    this.loadStructure();
+
     for (const [_, s] of this.entityStates) s.state.dereferenceEntity();
 
     this.#simulateIntervalId = system.runInterval(() => {
@@ -287,6 +329,12 @@ export class Recording {
       if (t > this.length) {
         this.stopSimulating();
         return;
+      }
+
+      try {
+        this.worldState.simulate(t);
+      } catch (e) {
+        console.error(e);
       }
 
       for (const e of this.entityStates.values()) {
