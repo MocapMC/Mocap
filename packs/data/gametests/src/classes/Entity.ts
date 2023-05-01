@@ -12,6 +12,8 @@ import { SimulatedPlayer, Test, register } from '@minecraft/server-gametest';
 
 export enum EntityEvent {
   attack = 'attack',
+  startUse = 'startUse',
+  stopUse = 'stopUse',
   spawn = 'spawn',
   despawn = 'despawn',
   death = 'death',
@@ -37,6 +39,12 @@ const EventFunc: {
 } = {
   attack(entity) {
     if (entity instanceof SimulatedPlayer) entity.attack();
+  },
+  startUse(entity, _, args) {
+    if (entity instanceof SimulatedPlayer) entity.useItem(args[0]);
+  },
+  stopUse(entity, _, args) {
+    if (entity instanceof SimulatedPlayer) entity.stopUsingItem();
   },
   spawn(entity, state, _) {
     state.spawn();

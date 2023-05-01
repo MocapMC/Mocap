@@ -179,6 +179,18 @@ export class Recording {
     this.handleRecordEvent(world.afterEvents.blockBreak, (ev) => {
       this.addEntityEvent(this.entityToStateId(ev.player), EntityEvent.attack);
     });
+    this.handleRecordEvent(world.afterEvents.itemStartCharge, (ev) => {
+      const e = ev.source;
+      this.addEntityEvent(
+        this.entityToStateId(e),
+        EntityEvent.startUse,
+        ev.itemStack
+      );
+    });
+    this.handleRecordEvent(world.afterEvents.itemStopCharge, (ev) => {
+      const e = ev.source;
+      this.addEntityEvent(this.entityToStateId(e), EntityEvent.stopUse);
+    });
 
     const prevDatas: {
       [k: string]: {
