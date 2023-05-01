@@ -2,10 +2,6 @@ import { system, world } from '@minecraft/server';
 import { Recording } from './classes/Recording';
 import { PlaybackState } from './enums/PlaybackState';
 
-world.afterEvents.chatSend.subscribe((ev) => {
-  world.sendMessage(`${ev.sender.name} said ${ev.message}`);
-});
-
 const record = new Recording('test', 'overworld', {
   from: { x: 0, y: -64, z: 0 },
   to: { x: 64, y: 320, z: 64 },
